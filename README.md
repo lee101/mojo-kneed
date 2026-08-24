@@ -49,7 +49,8 @@ Not covered:
 - APIs outside `KneeLocator`, `DataGenerator`, and `find_shape` are not
   provided.
 - This is a CPU implementation. No GPU path is included because Kneedle's
-  linear passes are memory-bound and would add transfer overhead.
+  linear passes stay below roughly two flops per byte moved; they are
+  memory-bound, and device transfers would add overhead rather than remove it.
 
 The test suite compares directly with the real `kneed==0.8.6` package, not a
 reimplemented Python reference.
@@ -108,14 +109,14 @@ Measured on an Intel Xeon E5-2697 v4 at 2.30 GHz, Linux
 6.8.0-136-generic x86-64, Python 3.13.14. Each row is the best of three warm
 runs of the complete Python call, including input copies and result
 construction. These are the results printed by `pixi run bench` on
-2026-07-31:
+2026-08-24:
 
 | case | mojo-kneed | kneed | speedup | result |
 | --- | ---: | ---: | ---: | --- |
-| KneeLocator offline, 10k | 0.98 ms | 5.99 ms | 6.13x | faster |
-| KneeLocator offline, 1M | 34.40 ms | 625.49 ms | 18.18x | faster |
-| KneeLocator online wavy, 2k | 2.11 ms | 17.07 ms | 8.08x | faster |
-| KneeLocator polynomial degree 7, 100k | 24.11 ms | 69.92 ms | 2.90x | faster |
+| KneeLocator offline, 10k | 0.51 ms | 6.24 ms | 12.29x | faster |
+| KneeLocator offline, 1M | 31.14 ms | 544.31 ms | 17.48x | faster |
+| KneeLocator online wavy, 2k | 2.31 ms | 17.14 ms | 7.41x | faster |
+| KneeLocator polynomial degree 7, 100k | 24.62 ms | 72.02 ms | 2.92x | faster |
 
 The polynomial row has the smallest gain because both implementations spend
 part of the call in the same NumPy polynomial fit. Benchmark results depend on
@@ -130,16 +131,18 @@ that mode needs no SciPy call. Polynomial mode deliberately uses the same
 `numpy.polyfit` and `numpy.poly1d` operations as upstream.
 
 The fitted values and x coordinates cross a C ABI as addresses to contiguous
-float64 NumPy arrays. Python preallocates every result and scratch array.
-Mojo reconstructs `UnsafePointer` values from the integer addresses. A fused
-SIMD pass performs normalization, direction/curvature transformation, and
-difference construction, with an explicit scalar tail. Inputs of at least
-262,144 points divide that independent pass into 65,536-point tasks across at
-most eight workers; smaller inputs stay serial. Neighboring-point extrema
-comparisons, sensitivity threshold calculation, and ordered threshold
-traversal remain serial. Extrema and knee indices share one temporary
-contiguous int64 allocation. Mojo writes result buffers in place, so no Mojo
-allocation, copy, or ownership crosses the boundary.
+float64 NumPy arrays. Python preallocates results in one diagnostic slab and
+one index scratch allocation. Mojo reconstructs pointers from the integer
+addresses. Fused SIMD passes perform range reduction, normalization,
+direction/curvature transformation, difference construction, and extrema
+comparisons, each with explicit scalar boundary and tail handling. The
+normalization pass also writes the independent `x_difference` diagnostic,
+avoiding a separate full-array copy. Inputs of at least 262,144 points divide
+that independent pass into 65,536-point tasks across at most eight workers;
+smaller inputs stay serial. Sensitivity threshold calculation and ordered
+threshold traversal remain serial. NumPy storage is used directly across the
+FFI call, and Mojo writes result buffers in place, so no Mojo allocation,
+copy, or ownership crosses the boundary.
 
 `build/build.sh` compiles `src/kneed.mojo` with
 `mojo build --emit shared-lib` into `dist/libmojo-kneed.so`. The ctypes loader

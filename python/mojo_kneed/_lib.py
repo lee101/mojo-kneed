@@ -19,7 +19,7 @@ I = ctypes.c_int64
 F = ctypes.c_double
 
 _SIGNATURES = {
-    "mk_kneedle": ([I, I, I, F] + [I] * 12, I),
+    "mk_kneedle": ([I, I, I, F] + [I] * 13, I),
 }
 
 

@@ -72,9 +72,13 @@ class KneeLocator:
 
         x64 = f64(self.x)
         smooth64 = f64(self.Ds_y)
-        self.x_normalized = np.empty(self.N, dtype=np.float64)
-        self.y_normalized = np.empty(self.N, dtype=np.float64)
-        self.y_difference = np.empty(self.N, dtype=np.float64)
+        diagnostic_scratch = np.empty((4, self.N), dtype=np.float64)
+        (
+            self.x_normalized,
+            self.x_difference,
+            self.y_normalized,
+            self.y_difference,
+        ) = diagnostic_scratch
         index_scratch = np.empty((4, self.N), dtype=np.int64)
         maxima, minima, knee_indices, norm_knee_indices = index_scratch
         thresholds = np.empty(self.N, dtype=np.float64)
@@ -93,6 +97,7 @@ class KneeLocator:
             direction_code,
             0 if online is False else 1,
             addr(self.x_normalized),
+            addr(self.x_difference),
             addr(self.y_normalized),
             addr(self.y_difference),
             addr(maxima),
@@ -114,7 +119,6 @@ class KneeLocator:
         self.maxima_indices = maxima[:maxima_count].copy()
         self.minima_indices = minima[:minima_count].copy()
         self.Tmx = thresholds[:maxima_count].copy()
-        self.x_difference = self.x_normalized.copy()
         self.x_difference_maxima = self.x_difference[self.maxima_indices]
         self.y_difference_maxima = self.y_difference[self.maxima_indices]
         self.x_difference_minima = self.x_difference[self.minima_indices]

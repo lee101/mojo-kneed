@@ -205,6 +205,13 @@ def test_no_knee_on_constant_curve():
     assert actual.knee is None
 
 
+def test_first_nan_preserves_ordered_range_reduction_parity():
+    x = np.arange(9, dtype=float)
+    y = 1.0 - np.exp(-x)
+    y[0] = np.nan
+    assert_locator_parity(ours.KneeLocator(x, y), UpstreamKneeLocator(x, y))
+
+
 @pytest.mark.parametrize("curve,direction,_", CURVES)
 def test_simd_tail_parity(curve, direction, _):
     x = np.linspace(0.0, 1.0, 19)
@@ -218,6 +225,15 @@ def test_simd_tail_parity(curve, direction, _):
         ours.KneeLocator(x, y, **options),
         UpstreamKneeLocator(x, y, **options),
     )
+
+
+def test_fused_diagnostic_outputs_remain_independent():
+    x = np.linspace(0.0, 1.0, 19)
+    y = 1.0 - np.exp(-7.0 * x)
+    locator = ours.KneeLocator(x, y)
+    expected = locator.x_normalized.copy()
+    locator.x_difference[0] = -1.0
+    assert np.array_equal(locator.x_normalized, expected)
 
 
 @pytest.mark.parametrize("n", [262_143, 262_144])
@@ -324,7 +340,7 @@ def test_ffi_helpers_reject_unsafe_buffers_and_complex_narrowing():
 
 def test_exported_kernels_reject_null_pointers_without_dereferencing():
     kernel = lib().mk_kneedle
-    args = [0, 0, 2, 1.0] + [0] * 12
+    args = [0, 0, 2, 1.0] + [0] * 13
     assert kernel(*args) == 2
 
 
